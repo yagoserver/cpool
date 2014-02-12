@@ -1,0 +1,446 @@
+<?php
+
+define('CARPOOL_NODE_INSERT_DISABLED', 0);
+define('CARPOOL_NODE_INSERT_ENABLED', 1);
+
+/**
+ * Inplements hook_init
+ */
+function carpool_init() {
+  drupal_add_css(drupal_get_path('module', 'carpool') .'/css/carpool.css');
+}
+
+/**
+ * Implements hook_menu
+ */
+function carpool_menu() {
+	$items = array();
+	//Create a carpool from node view
+	$items['carpool/create'] = array(
+	  'title' => 'Create a carpool',
+    'type' => MENU_CALLBACK,
+    'access callback' => TRUE,
+    //'page arguments' => array(2,3),
+    'page callback' => 'drupal_get_form',
+		'page arguments' => array('cp_create_form'),
+	);
+
+  $items['carpool/view'] = array(
+    'title' => t('View carpool'),
+    'page callback' => 'carpool_view_carpool',
+    'access callback' => TRUE,
+  );
+
+  $items['carpool/join'] = array(
+    'title' => t('Join carpool'),
+    'page callback' => 'carpool_join_carpool',
+    'access callback' => TRUE,
+  );
+  $items['carpool/disembark'] = array(
+    'title' => t('Disembark a carpool'),
+    'page callback' => 'carpool_disembark_carpool',
+    'access callback' => TRUE,
+  );
+  return $items;
+}
+
+function carpool_view_carpool( $carpool_id) {
+  // Fall back if $js is not set.
+ /* if (!$js) {
+    return drupal_access_denied();
+  } */
+  $title = 'test';
+  $carpool = entity_load_single('eck_carpool', $carpool_id);
+  if ($carpool) {
+    $cp_array = array(
+      '0' => $carpool,
+    );
+    $output = drupal_render(entity_view('eck_carpool', $cp_array, 'full'));
+  //  if ($js) {
+    ctools_include('ajax');
+    ctools_include('modal');
+    ctools_include('plugins');
+    ctools_modal_add_js();
+    $popup_style = _popup_style();
+    drupal_add_js($popup_style, 'setting');
+    $commands = array();
+    $commands[] = ctools_modal_command_display($title, $output);
+    print ajax_render($commands);
+    exit;
+  //  }
+ //   else {
+ //     return $output;
+  //  }
+  }
+  else {
+    drupal_set_message('Entity load error on ' . $carpool_id);
+    return;
+  }
+}
+
+function carpool_join_carpool($carpool_id, $uid) {
+  ctools_include('ajax');
+  ctools_include('modal');
+  //ctools_include('plugins');
+//  ctools_modal_add_js();
+  $popup_style = _popup_style_confirm_modal();
+  drupal_add_js($popup_style, 'setting');
+
+  $form_state = array(
+    'title' => t('Please confirm ...'),
+    'ajax' => TRUE,
+  );
+  $output = ctools_modal_form_wrapper('_cp_modal_confirm_form', $form_state);
+  if (!empty($form_state['executed'])) {
+    $output = array();
+    $output[] = ctools_modal_command_dismiss();
+    $output[] = ctools_ajax_command_reload();
+    //add user to the carpool:
+    $cp = entity_load_single('eck_carpool', $carpool_id);
+    $cp_wrapper = entity_metadata_wrapper('eck_carpool', $cp);
+    $cp_wrapper-> field_passengers[] = $uid;
+    $cp_wrapper-> save(true);
+    entity_save('eck_carpool', $cp_wrapper);
+  }
+  print ajax_render($output);
+  exit;
+}
+
+function carpool_disembark_carpool($carpool_id, $uid) {
+  ctools_include('ajax');
+  ctools_include('modal');
+  //ctools_include('plugins');
+  ctools_modal_add_js();
+  $popup_style = _popup_style_confirm_modal();
+  drupal_add_js($popup_style, 'setting');
+
+  $form_state = array(
+    'title' => t('Please confirm ...'),
+    'ajax' => TRUE,
+  );
+  $output = ctools_modal_form_wrapper('_cp_modal_confirm_form', $form_state);
+  if (!empty($form_state['executed'])) {
+    $output = array();
+    $output[] = ctools_modal_command_dismiss();
+    $output[] = ctools_ajax_command_reload();
+    //add user to the carpool:
+    $cp = entity_load_single('eck_carpool', $carpool_id);
+    $cp_wrapper = entity_metadata_wrapper('eck_carpool', $cp);
+    foreach ($cp_wrapper-> field_passengers-> value() as $key => $pax_object) {
+      if ($pax_object-> uid == $uid) {
+        unset($cp_wrapper-> field_passengers[$key]);
+        break;
+      }
+    }
+    $cp_wrapper-> save(true);
+    entity_save('eck_carpool', $cp_wrapper);
+  }
+  print ajax_render($output);
+  exit;
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter() for the node type form.
+ */
+function carpool_form_node_type_form_alter(&$form, &$form_state) {
+  $default_value = carpool_get_setting($form['#node_type']->type);
+  $form['carpool'] = array(
+    '#type' => 'radios',
+    '#weight' => 0,
+    '#title' => t('Carpool option for this node.'),
+    '#description' => 'Enables users with permission to add carpools to this node',
+    '#default_value' => $default_value,
+    '#options' => array(
+      t('Disabled'),
+      t('Enabled'),
+    )
+  );
+}
+
+/**
+ * Implements hook_form_FORM_ID_alter() for the node form.
+ */
+function carpool_form_node_form_alter(&$form, &$form_state, $form_id) {
+  // todo $form['#submit'][] = 'auto_nodetitle_node_form_submit';
+  if ((carpool_get_setting($form['#node']->type)) == CARPOOL_NODE_INSERT_ENABLED) {
+  }
+}
+
+/**
+ * Implements hook_node_view().
+ */
+function carpool_node_view($node, $view_mode, $langcode) {
+	// check if carpool_node_insert enabled on this node
+	if (carpool_get_setting($node-> type)){
+    if ($view_mode == 'full'){
+			$variables = _carpool_get_variables($node-> nid);
+			// add a button so a user can offer a ride
+      $node-> content['carpool_insert'] = array(
+        '#markup' => theme('carpool_insert', $variables),
+        '#weight' => 1,
+      );
+			return $node;
+		}
+  }
+}
+
+/**
+* Implements hook_entity_view
+*/
+function carpool_entity_view($entity, $type, $view_mode, $langcode) {
+  if ($type <> 'node') {
+		//debug($entity-> content, 'content', TRUE);
+	}
+}
+
+function _carpool_get_variables($nid) {
+	global $user;
+	$vars = array();
+	$node = node_load($nid);
+	// Does global user already offered carpool?
+	$carpools = field_get_items('node', $node, 'field_carpool');
+	$data = cp_check_user_status($user-> uid, $carpools);
+	$vars['carpool_create_url'] = '/carpool/create';
+	$vars['nid'] = $nid;
+	$vars['uid'] = $user-> uid;
+	$vars['number_rides'] = count($carpools);
+  $vars['carpools'] = $carpools;
+	$vars['data'] = $data;
+	//$vars['has_cp'] = $data['has_cp'];
+
+
+  return $vars;
+}
+
+/**
+ * Implements of hook_theme
+ * This will register the theme functions with drupal
+ */
+function carpool_theme($existing, $type, $theme, $path) {
+  return array(
+	  'carpool_insert' => array(
+		  'variables' => array('variables' => NULL),
+		),
+  );
+}
+
+/**
+ * theme function for carpool create carpool
+ */
+function theme_carpool_insert($vars) {
+  //debug($vars['data']);
+  global $user;
+  $has_cp = $vars['data']['has_cp']; // has created a carpool already
+  $has_ride = $vars['data']['has_ride'];
+  ctools_include('ajax');
+  ctools_include('modal');
+  ctools_include('plugins');
+  ctools_modal_add_js();
+  $popup_style = _popup_style();
+  drupal_add_js($popup_style, 'setting');
+  //  $output .= '<div id="modal-message">&nbsp</div>';
+	//debug($vars, '$vars'. TRUE);exit();
+	$output = '<div id="carpool"><h2>' . t('Carpool') . '</h2>';
+  //debug($vars);
+  //debug($vars['data']['carpools']);
+
+  if ($vars['number_rides']) {
+    $output .=
+      '<table>';
+      $col = 0;
+      $output .= '<tr>';
+
+      foreach ($vars['data']['carpools']as $carpool) {
+      //print_r($carpool);exit();
+        $on_board = false;
+        if (isset($carpool['pax_uid'])) {
+          $on_board = in_array_r($user-> uid, $carpool['pax_uid']);
+        }
+        //debug(print_r($carpool['pax_uid']));
+        $col++;
+        if ($col == 4) {
+          $output .= '</tr><tr>';
+          $col = 0;
+        }
+        $output .=
+          // http://dev7.yagoserver.com/eck_carpool/eck_carpool/43
+          '<td>' .
+          '<div class="carpool-icons"><span class="title">' . $carpool['title'] . '</span>' .
+          '<br/>' .
+          _popup_link('Info', 'carpool/view/' . $carpool['id'], t('Information'), 'carpool-info');
+          if (!$has_cp && !$has_ride) {
+            $output .= _popup_link('Join', 'carpool/join/' . $carpool['id'] . '/' . $user-> uid, t('Join this carpool'), ' carpool-join');
+          }
+          if ($on_board) {
+            $output .= _popup_link('Disembark', 'carpool/disembark/' . $carpool['id'] . '/' . $user-> uid, t('Disembark this carpool'), ' carpool-disembark');
+
+          }
+          $output .= '</div>';
+          if (isset($carpool['pax'])) {
+            foreach ($carpool['pax'] as $pax_name) {
+              $output .= $pax_name . '</br>';
+            }
+        }
+        $output .= '</td>';
+		  }
+	  	$output .= '</tr></table>';
+  	}
+	// Create link for user
+	if (!$vars['data']['has_cp']) {
+	  $output .= '<div class = "carpool-create"><a href="' . $vars['carpool_create_url'] . '/' . $vars['nid'] . '/' . $vars['uid'] . '">Create a carpoolride</a></div>';
+	}
+	$output .= '<div class = "carpool-request">
+	             <div class="carpool-info"><p>' . t('Select this link is you need a ride but there is none offered') . '</p></div><div="carpool-request"><a href="#">' . t('Request a ride') . '</a></div></div>';
+  $output  .='</div>';
+  return $output;
+}
+
+/**
+ * Gets the carpool setting associated with the given content type.
+ */
+function carpool_get_setting($type) {
+  return variable_get('carpool_' . $type, CARPOOL_NODE_INSERT_DISABLED);
+}
+
+/**
+ * Carpool create form.
+ * @params $data contains values to pass to the form function
+ */
+function cp_create_form($form, &$form_state, $parent_nid, $uid) {
+	$data = array();
+	$data['uid'] = $uid;
+	$data['nid'] = $parent_nid;
+	$form['#parents'] = array();
+	$form_state['data'] = $data;
+	//Create a new carpool
+	$entity_type = "eck_carpool";
+  $carpool = entity_create($entity_type, array('type' => "eck_carpool"));
+	//debug($carpool, 'carpool', TRUE);
+	// Attache carpool to the form.
+ 	field_attach_form('eck_carpool', $carpool, $form, $form_state);
+	// disable certain fields
+	$form['field_passengers']['#disabled'] = TRUE;
+	// hide certain fields
+	$form['field_carpool_status']['#access'] = FALSE;
+	$form['field_open_seats']['#access'] = FALSE;
+	$form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Save changes'),
+    '#submit' => array('cp_create_form_submit'),
+		'#weight' => 1000,
+	 );
+ //debug($form);
+	return $form;
+}
+
+function cp_create_form_submit($form, &$form_state) {
+	$nid = $form_state['data']['nid'];
+	$user = user_load($form_state['data']['uid']);
+
+	// Get entity from the form.
+  $cp = $form['#entity'];
+	$cp_wrapper = entity_metadata_wrapper('eck_carpool', $cp);
+	$cp_wrapper-> title-> set(t('Carpool with ') . $user-> name);
+
+  // Submit entity with default callbacks.
+  //field_attach_submit('eck_carpool', $entity, $form, $form_state);
+
+  // Save entity.
+  entity_save('eck_carpool', $cp);
+
+	// Attach this entity to the parent node (pn)
+	$pn = entity_load_single('node', $nid);
+  $pn_wrapper = entity_metadata_wrapper('node', $pn);
+	$pn_wrapper-> field_carpool[] = $cp;
+	$pn_wrapper->save(true);
+  entity_save('node', $pn);
+
+  //return to the parent entity form
+
+	drupal_goto('/node/' . $nid);
+}
+
+// Return de carpool data for global user for this node
+// Does global already has Carpools?
+function cp_check_user_status($uid, $carpools) {
+	//debug($uid, "uid", TRUE);
+	$data = array('has_cp' => FALSE);
+	$data['carpools'] = array(); // array to hold carpools(data)
+	$users_with_cp = array();
+  $users_with_ride = array();
+  //check is there is a carpool for user/node
+	if (count($carpools)) {
+	  foreach ($carpools as $carpool) {
+     // print_r($carpool);exit();
+			$array = array();
+		  $cp = entity_load_single('eck_carpool', $carpool['target_id']);
+			$wrapper = entity_metadata_wrapper('eck_carpool', $cp);
+      //debug($wrapper->uid->uid-> value(), "wrapper uid", true);
+      $array['id'] = $wrapper-> id-> value();
+			$array['title'] = $wrapper-> title-> value();
+			$array['status'] = $wrapper-> field_carpool_status->label();
+			$array['no_pax'] = count($wrapper-> field_passengers-> value());
+      foreach ($wrapper-> field_passengers-> value() as $pax) {
+       // print_r($wrapper->field_passengers-> value());exit();
+        $array['pax'][] = $pax-> name;
+        $array['pax_uid'][] = $pax-> uid;
+        $users_with_ride[] = $pax-> uid;
+      }
+ 		  //$users_with_cp[] = field_get_items('eck_carpool', $cp, 'uid');
+      $users_with_cp[] = $wrapper-> uid-> uid-> value();
+			$data['carpools'][] = $array;
+		}
+    //debug($users_with_cp);
+		$data['has_cp'] = (in_array($uid, $users_with_cp) ? TRUE : FALSE);
+    $data['has_ride'] = (in_array($uid, $users_with_ride) ? TRUE : FALSE);
+	}
+	return $data;
+}
+
+function _popup_style() {
+  return array(
+    'simple-modal-style' => array(
+      'modalSize' => array(
+        'type' => 'fixed',
+        'width' => 500,
+        'height' => 500,
+        'addWidth' =>0,
+        'addHeight' => 0,
+      ),
+      'animation' => 'fadeIn',
+    ),
+  );
+}
+
+function _popup_style_confirm_modal() {
+  return array ('cp-confirm-form' => array(
+    'modalSize' => array(
+      'type' => 'fixed',
+      'width' => 240,
+      'height' => 240,
+      'addWidth' =>0,
+      'addHeight' => 0,
+    ),
+    'animation' => 'fadeIn',
+    ),
+  );
+}
+// Helper to create a ctools modal link
+function _popup_link($link_text, $callback_path, $linktext2, $classes) {
+  $text = t("@text", array('@text' => $link_text));
+//  $all_classes = 'ctools-modal-simple-modal-style ' . $classes;
+  $all_classes =  $classes;
+  return ctools_modal_text_button($text, $callback_path, $linktext2, $all_classes);
+}
+
+function _cp_modal_confirm_form($form, &$form_state) {
+  $form['confirm yes'] = array(
+    '#markup' => '<p>' .  t('You will be added to this carpool') . $form_state['redirect'] .  '</p>',
+  );
+
+  $form['submit ja'] = array(
+    '#type' => 'submit',
+    '#value' => t('OK'),
+  );
+  return $form;
+}

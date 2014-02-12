@@ -1,0 +1,7 @@
+name = Carpool
+description = Carpool utility for your community
+dependencies[] = ctools
+package = "Other"
+;stylesheets[all][] = gigplanning.css
+;scripts[] = /misc/tableheader.js
+core = "7.x"

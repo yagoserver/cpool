@@ -1,0 +1,35 @@
+#carpool { background-color:#CC9; border-bottom:#CC6 medium; padding:10px 24px;}
+
+#carpool p {}
+#carpool table {
+
+}
+#carpool .label-text, .carpool-icons {
+    font-size: 1.0em;
+    /* background-color: #CCA; */
+    border-bottom: #CCA 2px solid; padding-bottom: 6px;
+}
+
+#carpool td {
+    vertical-align: top;
+}
+#carpool .title { font-size: 1.2em; font-weight: bold;}
+.carpool-title-link {font-size: 1.2em;}
+.carpool-number-rides {background-color: #FFF;}
+
+.carpool-create {}
+
+a.carpool-info, a.carpool-join, a.carpool-disembark { display: inline; padding: 2px 2px 2px 22px; margin-right: 8px; }
+a.carpool-disembark { margin-right: 0px;}
+.carpool-info {  background: url(vraagteken_web.png) left center no-repeat;}
+.carpool-join {  background: url(instappen_web.png) left center no-repeat;}
+.carpool-disembark {  background: url(uitstappen_web.png) left center no-repeat;}
+/* modal form */
+.entity-eck-carpool {
+ /* background-color: #CCCC99; */
+    text-align: left !important;
+    font-family: sans-serif; font-size: 0.8em;
+}
+
+.entity-eck-carpool .field-label {display: inline-table; font-weight: normal; font-style: italic; width: 120px;}
+.entity-eck-carpool .field-item {display: block; font-weight: 800;}
