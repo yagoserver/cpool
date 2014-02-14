@@ -59,14 +59,15 @@ function carpool_view_carpool( $carpool_id) {
   //  if ($js) {
     ctools_include('ajax');
     ctools_include('modal');
-    ctools_include('plugins');
-    ctools_modal_add_js();
-    $popup_style = _popup_style();
+   // ctools_include('plugins');
+   // ctools_modal_add_js();
+    $popup_style = _popup_style_show_cp();
     drupal_add_js($popup_style, 'setting');
-    $commands = array();
-    $commands[] = ctools_modal_command_display($title, $output);
-    print ajax_render($commands);
-    exit;
+    //$commands = array();
+   // $commands[] = ctools_modal_render($title, $output);
+    //print ajax_render($commands);
+    //exit;
+    return ctools_modal_render($title, $output);
   //  }
  //   else {
  //     return $output;
@@ -228,19 +229,22 @@ function carpool_theme($existing, $type, $theme, $path) {
  * theme function for carpool create carpool
  */
 function theme_carpool_insert($vars) {
-  //debug($vars['data']);
   global $user;
-  $has_cp = $vars['data']['has_cp']; // has created a carpool already
-  $has_ride = $vars['data']['has_ride'];
+  //include CTools tools
   ctools_include('ajax');
   ctools_include('modal');
-  ctools_include('plugins');
   ctools_modal_add_js();
-  $popup_style = _popup_style();
+  ctools_include('plugins');
+  $popup_style = _popup_style_show_cp();
   drupal_add_js($popup_style, 'setting');
-  //  $output .= '<div id="modal-message">&nbsp</div>';
-	//debug($vars, '$vars'. TRUE);exit();
-	$output = '<div id="carpool"><h2>' . t('Carpool') . '</h2>';
+  // ctools expects /js, /image and /css directories
+  ctools_add_js('carpool', 'carpool');
+  ctools_add_css('carpool', 'carpool');
+
+  $has_cp = $vars['data']['has_cp']; // has created a carpool already
+  $has_ride = $vars['data']['has_ride'];
+
+  $output = '<div id="carpool"><h2>' . t('Carpool') . '</h2>';
   //debug($vars);
   //debug($vars['data']['carpools']);
 
@@ -263,13 +267,12 @@ function theme_carpool_insert($vars) {
           $col = 0;
         }
         $output .=
-          // http://dev7.yagoserver.com/eck_carpool/eck_carpool/43
           '<td>' .
           '<div class="carpool-icons"><span class="title">' . $carpool['title'] . '</span>' .
           '<br/>' .
-          _popup_link('Info', 'carpool/view/' . $carpool['id'], t('Information'), 'carpool-info');
+          _popup_link('Info', 'carpool/view/' . $carpool['id'], t('Information'), ' carpool-show ctools-modal-carpool-show');
           if (!$has_cp && !$has_ride) {
-            $output .= _popup_link('Join', 'carpool/join/' . $carpool['id'] . '/' . $user-> uid, t('Join this carpool'), ' carpool-join');
+            $output .= _popup_link('Join', 'carpool/join/' . $carpool['id'] . '/' . $user-> uid, t('Join this carpool'), 'ctools-modal-carpool-show carpool-join');
           }
           if ($on_board) {
             $output .= _popup_link('Disembark', 'carpool/disembark/' . $carpool['id'] . '/' . $user-> uid, t('Disembark this carpool'), ' carpool-disembark');
@@ -292,6 +295,9 @@ function theme_carpool_insert($vars) {
 	$output .= '<div class = "carpool-request">
 	             <div class="carpool-info"><p>' . t('Select this link is you need a ride but there is none offered') . '</p></div><div="carpool-request"><a href="#">' . t('Request a ride') . '</a></div></div>';
   $output  .='</div>';
+
+
+
   return $output;
 }
 
@@ -397,17 +403,22 @@ function cp_check_user_status($uid, $carpools) {
 	return $data;
 }
 
-function _popup_style() {
+function _popup_style_show_cp() {
   return array(
-    'simple-modal-style' => array(
+    'carpool-show' => array(
       'modalSize' => array(
         'type' => 'fixed',
-        'width' => 500,
-        'height' => 500,
-        'addWidth' =>0,
-        'addHeight' => 0,
+        'width' => 400,
+        'height' => 200,
+        'addWidth' =>10,
+        'addHeight' => 10,
+      ),
+      'modalOptions' => array(
+        'opacity' => .6,
+        'background-color' => '#684C31',
       ),
       'animation' => 'fadeIn',
+      'modalTheme' => 'CPShowCarpoolModal',
     ),
   );
 }
@@ -425,12 +436,13 @@ function _popup_style_confirm_modal() {
     ),
   );
 }
+
 // Helper to create a ctools modal link
 function _popup_link($link_text, $callback_path, $linktext2, $classes) {
   $text = t("@text", array('@text' => $link_text));
 //  $all_classes = 'ctools-modal-simple-modal-style ' . $classes;
   $all_classes =  $classes;
-  return ctools_modal_text_button($text, $callback_path, $linktext2, $all_classes);
+  return ctools_modal_text_button($text, $callback_path, $linktext2, $classes);
 }
 
 function _cp_modal_confirm_form($form, &$form_state) {
